@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+
+    <declare-styleable name="CropImageView">
+        <attr name="civ_show_crop_line" format="boolean" />
+        <attr name="civ_crop_line_width" format="dimension" />
+        <attr name="civ_crop_mask_color" format="color|reference" />
+        <attr name="civ_crop_ratio_width" format="float" />
+        <attr name="civ_crop_ratio_height" format="float" />
+    </declare-styleable>
+</resources>
