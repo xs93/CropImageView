@@ -17,6 +17,7 @@ import android.view.View.OnLayoutChangeListener
 import android.view.animation.LinearInterpolator
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.view.GestureDetectorCompat
+import kotlin.math.roundToInt
 
 
 /**
@@ -467,14 +468,33 @@ class CropImageView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun getCropBitmap(): Bitmap? {
+    fun getCropBitmap(baseWidth: Int = 0): Bitmap? {
         if (drawable == null) {
             return null
         }
         val width = mCropRectF.width().toInt()
         val height = mCropRectF.height().toInt()
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        if (width == 0 || height == 0) {
+            return null
+        }
+        var canvasScale = 1.0f
+        var bitmapWidth = width
+        var bitmapHeight = height
+
+        if (baseWidth != 0) {
+            if (width < height) {
+                canvasScale = baseWidth * 1.0f / width
+                bitmapWidth = baseWidth
+                bitmapHeight = (height * canvasScale).roundToInt()
+            } else {
+                canvasScale = baseWidth * 1.0f / height
+                bitmapWidth = (width * canvasScale).roundToInt()
+                bitmapHeight = baseWidth
+            }
+        }
+        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
+        canvas.scale(canvasScale, canvasScale)
         canvas.translate(-mCropRectF.left, -mCropRectF.top)
         canvas.save()
         canvas.concat(getDrawMatrix())
