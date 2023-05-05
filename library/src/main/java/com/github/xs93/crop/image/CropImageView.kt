@@ -468,7 +468,7 @@ class CropImageView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun getCropBitmap(baseWidth: Int = 0): Bitmap? {
+    fun getCropBitmap(baseWidth: Int = 0, config: Bitmap.Config = Bitmap.Config.ARGB_8888): Bitmap? {
         if (drawable == null) {
             return null
         }
@@ -492,7 +492,7 @@ class CropImageView @JvmOverloads constructor(
                 bitmapHeight = baseWidth
             }
         }
-        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, config)
         val canvas = Canvas(bitmap)
         canvas.scale(canvasScale, canvasScale)
         canvas.translate(-mCropRectF.left, -mCropRectF.top)

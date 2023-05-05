@@ -29,6 +29,10 @@ android {
         jvmTarget = '1.8'
         moduleName = "com.github.xs93.crop.imageview"
     }
+
+    buildFeatures {
+        buildConfig = false
+    }
 }
 
 dependencies {
