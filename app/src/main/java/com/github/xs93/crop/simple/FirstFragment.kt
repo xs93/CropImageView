@@ -34,6 +34,17 @@ class FirstFragment : Fragment() {
         binding.btnCrop.setOnClickListener {
             binding.cropView.getCropBitmap(512)
         }
+        binding.btn1.setOnClickListener {
+            binding.cropView.setCropRatio(1f, 1f)
+        }
+        binding.btn2.setOnClickListener {
+            binding.cropView.setCropRatio(2f, 3f)
+        }
+
+        binding.btn3.setOnClickListener {
+            binding.cropView.setCropRatio(3f, 2f)
+        }
+
     }
 
     override fun onDestroyView() {

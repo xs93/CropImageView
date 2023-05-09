@@ -8,6 +8,7 @@ import android.graphics.*
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.util.AttributeSet
+import android.util.Log
 import android.view.GestureDetector.SimpleOnGestureListener
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -154,6 +155,8 @@ class CropImageView @JvmOverloads constructor(
         if (event.actionMasked == MotionEvent.ACTION_UP) {
             scaleAndTranslateToCenter()
             hideClipPath()
+            mLastScaleFocusX = 0f
+            mLastScaleFocusY = 0f
         }
         return true
     }
@@ -219,18 +222,24 @@ class CropImageView @JvmOverloads constructor(
         if (drawable == null) {
             return
         }
-        val viewWidth = getImageViewWidth()
-        val viewHeight = getImageViewHeight()
+
+        updateCropRect()
+
+        val viewWidth = mCropRectF.width()
+        val viewHeight = mCropRectF.height()
 
         val drawableWidth = drawable.intrinsicWidth
         val drawableHeight = drawable.intrinsicHeight
 
-        val widthScale = viewWidth.toFloat() / drawableWidth
-        val heightScale = viewHeight.toFloat() / drawableHeight
+        val widthScale = viewWidth / drawableWidth
+        val heightScale = viewHeight / drawableHeight
         val scale = widthScale.coerceAtLeast(heightScale)
         mBaseMatrix.reset()
         mBaseMatrix.postScale(scale, scale)
-        mBaseMatrix.postTranslate((viewWidth - drawableWidth * scale) / 2f, (viewHeight - drawableHeight * scale) / 2f)
+        mBaseMatrix.postTranslate(
+            (viewWidth - drawableWidth * scale) / 2f + mCropRectF.left,
+            (viewHeight - drawableHeight * scale) / 2f + mCropRectF.top
+        )
         resetMatrix()
     }
 
@@ -326,30 +335,30 @@ class CropImageView @JvmOverloads constructor(
         if (oldScale >= 1) {
             val rw = displayRectF.width()
             val rh = displayRectF.height()
-            val viewWidth = getImageViewWidth()
-            val viewHeight = getImageViewHeight()
+
+            val viewWidth = mCropRectF.width()
+            val viewHeight = mCropRectF.height()
             var deltaX = 0f
             var deltaY = 0f
             if (rw <= viewWidth) {
-                deltaX = (viewWidth - rw) / 2f - displayRectF.left
+                deltaX = (viewWidth - rw) / 2f - displayRectF.left + mCropRectF.left
             }
             if (rh <= viewHeight) {
-                deltaY = (viewHeight - rh) / 2f - displayRectF.top
+                deltaY = (viewHeight - rh) / 2f - displayRectF.top + mCropRectF.top
+            }
+            if (rw >= viewWidth && displayRectF.left > mCropRectF.left) {
+                deltaX = mCropRectF.left - displayRectF.left
+            }
+            if (rw >= viewWidth && displayRectF.right < mCropRectF.right) {
+                deltaX = mCropRectF.right - displayRectF.right
             }
 
-            if (rw >= viewWidth && displayRectF.left > 0) {
-                deltaX = -displayRectF.left
-            }
-            if (rw >= viewWidth && displayRectF.right < viewWidth) {
-                deltaX = viewWidth - displayRectF.right
+            if (rh >= viewHeight && displayRectF.top > mCropRectF.top) {
+                deltaY = mCropRectF.top - displayRectF.top
             }
 
-            if (rh >= viewHeight && displayRectF.top > 0) {
-                deltaY = -displayRectF.top
-            }
-
-            if (rh >= viewHeight && displayRectF.bottom < viewHeight) {
-                deltaY = viewHeight - displayRectF.bottom
+            if (rh >= viewHeight && displayRectF.bottom < mCropRectF.bottom) {
+                deltaY = mCropRectF.bottom - displayRectF.bottom
             }
             if (deltaX == 0f && deltaY == 0f) {
                 return
@@ -379,8 +388,33 @@ class CropImageView @JvmOverloads constructor(
             val startX = getValue(mSuppMatrix, Matrix.MTRANS_X)
             val startY = getValue(mSuppMatrix, Matrix.MTRANS_Y)
             val deltaScale = 1 - oldScale
-            val deltaX = 0 - startX
-            val deltaY = 0 - startY
+
+            val baseRect = RectF()
+            baseRect.set(0f, 0f, drawable.intrinsicWidth.toFloat(), drawable.intrinsicHeight.toFloat())
+            mBaseMatrix.mapRect(baseRect)
+
+            val baseCropDeltaX = (baseRect.width() - mCropRectF.width()) / 2f
+            val baseCropDeltaY = (baseRect.height() - mCropRectF.height()) / 2f
+
+
+            val endX = if (displayRectF.left > mCropRectF.left) {
+                baseCropDeltaX
+            } else if (displayRectF.right < mCropRectF.right) {
+                -baseCropDeltaX
+            } else {
+                startX
+            }
+            val endY = if (displayRectF.top > mCropRectF.top) {
+                baseCropDeltaY
+            } else if (displayRectF.bottom < mCropRectF.bottom) {
+                -baseCropDeltaY
+            } else {
+                startY
+            }
+
+            val deltaX = endX - startX
+            val deltaY = endY - startY
+
             ValueAnimator.ofFloat(0f, 1f).apply {
                 duration = mAnimDuration
                 interpolator = LinearInterpolator()
@@ -448,7 +482,7 @@ class CropImageView @JvmOverloads constructor(
     fun setCropRatio(width: Float, height: Float) {
         mCropRatioWidth = width
         mCropRatioHeight = height
-        updateCropRect()
+        updateBaseMatrix()
         invalidate()
     }
 
