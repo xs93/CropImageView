@@ -8,7 +8,6 @@ import android.graphics.*
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.util.AttributeSet
-import android.util.Log
 import android.view.GestureDetector.SimpleOnGestureListener
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -56,6 +55,8 @@ class CropImageView @JvmOverloads constructor(
 
     private var mUpAnim: ValueAnimator? = null
 
+    private val mCropOutRectF = RectF()
+
     private var mCropRatioWidth: Float = 3f
     private var mCropRatioHeight: Float = 2f
     private var mCropBackground: Int = DEFAULT_CROP_MASK_COLOR
@@ -63,14 +64,20 @@ class CropImageView @JvmOverloads constructor(
     private val mXfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
     private var mCropRectF = RectF()
 
+    private val mCropRectBorderPaint = Paint(Paint.DITHER_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private var mCropRectBorderWidth: Float = 0f
+    private var mCropRectBorderColor: Int = Color.WHITE
+    private var mCropRectBorderRectF = RectF()
+
     private var mShowCropLine = true
     private var mCropLinesWidth = 4f
 
-    private var mCropSubLinesPath = Path()
-    private var mCropLinesPathPaint = Paint(Paint.DITHER_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val mCropSubLinesPath = Path()
+    private val mCropLinesPathPaint = Paint(Paint.DITHER_FLAG or Paint.ANTI_ALIAS_FLAG)
     private var mShowCropLinesPathAnim: ValueAnimator? = null
     private var mHideCropLinesPathAnim: ValueAnimator? = null
     private var mCropLinesAnimDuration = DEFAULT_LINE_ANIM_DURATION
+
 
     private val mOnGestureListener = object : SimpleOnGestureListener() {
         override fun onScroll(e1: MotionEvent, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
@@ -79,7 +86,6 @@ class CropImageView @JvmOverloads constructor(
             return true
         }
     }
-
     private val mOnScaleGestureListener = object : SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
 
@@ -104,7 +110,6 @@ class CropImageView @JvmOverloads constructor(
             return true
         }
     }
-
     private val mGestureDetector = GestureDetectorCompat(context, mOnGestureListener)
     private val mScaleGestureDetector = ScaleGestureDetector(context, mOnScaleGestureListener)
 
@@ -116,6 +121,8 @@ class CropImageView @JvmOverloads constructor(
         mCropRatioHeight = ta.getFloat(R.styleable.CropImageView_civ_crop_ratio_height, 1f)
         mCropLinesWidth = ta.getDimension(R.styleable.CropImageView_civ_crop_line_width, 4f)
         mCropBackground = ta.getColor(R.styleable.CropImageView_civ_crop_mask_color, DEFAULT_CROP_MASK_COLOR)
+        mCropRectBorderWidth = ta.getDimension(R.styleable.CropImageView_civ_crop_border_width, 30f)
+        mCropRectBorderColor = ta.getColor(R.styleable.CropImageView_civ_crop_border_color, Color.WHITE)
         ta.recycle()
 
         scaleType = ScaleType.MATRIX
@@ -125,6 +132,12 @@ class CropImageView @JvmOverloads constructor(
             color = Color.WHITE
             strokeWidth = mCropLinesWidth
             alpha = 0
+        }
+
+        mCropRectBorderPaint.apply {
+            style = Paint.Style.STROKE
+            strokeWidth = mCropRectBorderWidth
+            color = mCropRectBorderColor
         }
     }
 
@@ -170,6 +183,7 @@ class CropImageView @JvmOverloads constructor(
         if (mShowCropLine) {
             canvas.drawPath(mCropSubLinesPath, mCropLinesPathPaint)
         }
+        canvas.drawRect(mCropRectBorderRectF, mCropRectBorderPaint)
     }
 
     override fun setImageResource(resId: Int) {
@@ -217,97 +231,34 @@ class CropImageView @JvmOverloads constructor(
     }
     //endregion
 
-
-    private fun updateBaseMatrix() {
-        if (drawable == null) {
-            return
-        }
-
-        updateCropRect()
-
-        val viewWidth = mCropRectF.width()
-        val viewHeight = mCropRectF.height()
-
-        val drawableWidth = drawable.intrinsicWidth
-        val drawableHeight = drawable.intrinsicHeight
-
-        val widthScale = viewWidth / drawableWidth
-        val heightScale = viewHeight / drawableHeight
-        val scale = widthScale.coerceAtLeast(heightScale)
-        mBaseMatrix.reset()
-        mBaseMatrix.postScale(scale, scale)
-        mBaseMatrix.postTranslate(
-            (viewWidth - drawableWidth * scale) / 2f + mCropRectF.left,
-            (viewHeight - drawableHeight * scale) / 2f + mCropRectF.top
-        )
-        resetMatrix()
-    }
-
-    private fun update() {
-        //这里必须判空，该方法调用时,类肯还未初始化完成
-        if (mSuppMatrix != null) {
-            if (mScaleEnable) {
-                updateBaseMatrix()
-            } else {
-                resetMatrix()
-            }
-        }
-    }
-
-    private fun getDrawMatrix(): Matrix {
-        mDrawMatrix.set(mBaseMatrix)
-        mDrawMatrix.postConcat(mSuppMatrix)
-        return mDrawMatrix
-    }
-
-    private fun resetMatrix() {
-        mSuppMatrix.reset()
-        checkAndDisplayMatrix()
-    }
-
-    private fun checkAndDisplayMatrix() {
-        imageMatrix = getDrawMatrix()
-    }
-
-    private fun getImageViewWidth(): Int {
-        return width - paddingLeft - paddingRight
-    }
-
-    private fun getImageViewHeight(): Int {
-        return height - paddingTop - paddingBottom
-    }
-
-    private fun getScale(matrix: Matrix): Float {
-        matrix.getValues(mMatrixValues)
-        return mMatrixValues[Matrix.MSCALE_Y]
-    }
-
-    private fun getValue(matrix: Matrix, valueType: Int): Float {
-        matrix.getValues(mMatrixValues)
-        return mMatrixValues[valueType]
-    }
-
     private fun updateCropRect() {
-        val viewWidth = measuredWidth
-        val viewHeight = measuredHeight
+        val viewWidth = measuredWidth - paddingLeft - paddingRight
+        val viewHeight = measuredHeight - paddingTop - paddingBottom
         if (viewWidth == 0 || viewHeight == 0 || mCropRatioWidth == 0.0f || mCropRatioHeight == 0f) {
             return
         }
         val rectWidth: Float
         val rectHeight: Float
-        if (mCropRatioWidth >= mCropRatioHeight) {
+        if (mCropRatioWidth > mCropRatioHeight) {
             rectWidth = viewWidth.toFloat()
             rectHeight = viewWidth / mCropRatioWidth * mCropRatioHeight
-        } else {
+        } else if (mCropRatioWidth < mCropRatioHeight) {
             rectHeight = viewHeight.toFloat()
             rectWidth = viewHeight / mCropRatioHeight * mCropRatioWidth
+        } else {
+            rectWidth = viewWidth.coerceAtMost(viewHeight).toFloat()
+            rectHeight = rectWidth
         }
-        val deltaX = (viewWidth - rectWidth) / 2f
-        val deltaY = (viewHeight - rectHeight) / 2f
-        mCropRectF.set(deltaX, deltaY, deltaX + rectWidth, deltaY + rectHeight)
+        val deltaX = (viewWidth - rectWidth) / 2f + paddingLeft
+        val deltaY = (viewHeight - rectHeight) / 2f + paddingTop
+
+        mCropOutRectF.set(deltaX, deltaY, deltaX + rectWidth, deltaY + rectHeight)
+        mCropRectF.set(mCropOutRectF)
+
+        mCropRectBorderRectF.set(mCropOutRectF)
+        mCropRectBorderRectF.inset(mCropRectBorderWidth / 2f, mCropRectBorderWidth / 2f)
 
         mCropSubLinesPath.reset()
-
         val widthLineLength = rectWidth / 3f
         val heightLineLength = rectHeight / 3f
 
@@ -322,6 +273,29 @@ class CropImageView @JvmOverloads constructor(
         mCropSubLinesPath.lineTo(mCropRectF.right, mCropRectF.top + heightLineLength * 2)
     }
 
+    private fun updateBaseMatrix() {
+        if (drawable == null) {
+            return
+        }
+        updateCropRect()
+
+        val viewWidth = mCropRectF.width()
+        val viewHeight = mCropRectF.height()
+
+        val drawableWidth = drawable.intrinsicWidth
+        val drawableHeight = drawable.intrinsicHeight
+
+        val widthScale = viewWidth / drawableWidth
+        val heightScale = viewHeight / drawableHeight
+        val scale = widthScale.coerceAtLeast(heightScale)
+        val deltaX = (viewWidth - drawableWidth * scale) / 2f + mCropRectF.left - paddingLeft
+        val deltaY = (viewHeight - drawableHeight * scale) / 2f + mCropRectF.top - paddingTop
+        mBaseMatrix.reset()
+        mBaseMatrix.postScale(scale, scale)
+        mBaseMatrix.postTranslate(deltaX, deltaY)
+        resetMatrix()
+    }
+
     private fun scaleAndTranslateToCenter() {
         if (drawable == null) {
             return
@@ -330,6 +304,10 @@ class CropImageView @JvmOverloads constructor(
         val displayRectF = RectF()
         displayRectF.set(0f, 0f, drawable.intrinsicWidth.toFloat(), drawable.intrinsicHeight.toFloat())
         getDrawMatrix().mapRect(displayRectF)
+
+        val baseRect = RectF()
+        baseRect.set(0f, 0f, drawable.intrinsicWidth.toFloat(), drawable.intrinsicHeight.toFloat())
+        mBaseMatrix.mapRect(baseRect)
 
         val oldScale = getScale(mSuppMatrix)
         if (oldScale >= 1) {
@@ -341,24 +319,24 @@ class CropImageView @JvmOverloads constructor(
             var deltaX = 0f
             var deltaY = 0f
             if (rw <= viewWidth) {
-                deltaX = (viewWidth - rw) / 2f - displayRectF.left + mCropRectF.left
+                deltaX = (viewWidth - rw) / 2f - displayRectF.left
             }
             if (rh <= viewHeight) {
-                deltaY = (viewHeight - rh) / 2f - displayRectF.top + mCropRectF.top
+                deltaY = (viewHeight - rh) / 2f - displayRectF.top
             }
             if (rw >= viewWidth && displayRectF.left > mCropRectF.left) {
-                deltaX = mCropRectF.left - displayRectF.left
+                deltaX = mCropRectF.left - displayRectF.left - paddingLeft
             }
             if (rw >= viewWidth && displayRectF.right < mCropRectF.right) {
-                deltaX = mCropRectF.right - displayRectF.right
+                deltaX = mCropRectF.right - displayRectF.right - paddingLeft
             }
 
             if (rh >= viewHeight && displayRectF.top > mCropRectF.top) {
-                deltaY = mCropRectF.top - displayRectF.top
+                deltaY = mCropRectF.top - displayRectF.top - paddingTop
             }
 
             if (rh >= viewHeight && displayRectF.bottom < mCropRectF.bottom) {
-                deltaY = mCropRectF.bottom - displayRectF.bottom
+                deltaY = mCropRectF.bottom - displayRectF.bottom - paddingTop
             }
             if (deltaX == 0f && deltaY == 0f) {
                 return
@@ -388,10 +366,6 @@ class CropImageView @JvmOverloads constructor(
             val startX = getValue(mSuppMatrix, Matrix.MTRANS_X)
             val startY = getValue(mSuppMatrix, Matrix.MTRANS_Y)
             val deltaScale = 1 - oldScale
-
-            val baseRect = RectF()
-            baseRect.set(0f, 0f, drawable.intrinsicWidth.toFloat(), drawable.intrinsicHeight.toFloat())
-            mBaseMatrix.mapRect(baseRect)
 
             val baseCropDeltaX = (baseRect.width() - mCropRectF.width()) / 2f
             val baseCropDeltaY = (baseRect.height() - mCropRectF.height()) / 2f
@@ -436,6 +410,50 @@ class CropImageView @JvmOverloads constructor(
                 mUpAnim = it
             }.start()
         }
+    }
+
+    private fun update() {
+        //这里必须判空，该方法调用时,类肯还未初始化完成
+        if (mSuppMatrix != null) {
+            if (mScaleEnable) {
+                updateBaseMatrix()
+            } else {
+                resetMatrix()
+            }
+        }
+    }
+
+    private fun getDrawMatrix(): Matrix {
+        mDrawMatrix.set(mBaseMatrix)
+        mDrawMatrix.postConcat(mSuppMatrix)
+        return mDrawMatrix
+    }
+
+    private fun resetMatrix() {
+        mSuppMatrix.reset()
+        checkAndDisplayMatrix()
+    }
+
+    private fun checkAndDisplayMatrix() {
+        imageMatrix = getDrawMatrix()
+    }
+
+    private fun getImageViewWidth(): Int {
+        return width - paddingLeft - paddingRight
+    }
+
+    private fun getImageViewHeight(): Int {
+        return height - paddingTop - paddingBottom
+    }
+
+    private fun getScale(matrix: Matrix): Float {
+        matrix.getValues(mMatrixValues)
+        return mMatrixValues[Matrix.MSCALE_Y]
+    }
+
+    private fun getValue(matrix: Matrix, valueType: Int): Float {
+        matrix.getValues(mMatrixValues)
+        return mMatrixValues[valueType]
     }
 
 

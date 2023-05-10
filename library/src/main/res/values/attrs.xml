@@ -8,5 +8,7 @@
         <attr name="civ_crop_mask_color" format="color|reference" />
         <attr name="civ_crop_ratio_width" format="float" />
         <attr name="civ_crop_ratio_height" format="float" />
+        <attr name="civ_crop_border_width" format="dimension" />
+        <attr name="civ_crop_border_color" format="color|reference" />
     </declare-styleable>
 </resources>
