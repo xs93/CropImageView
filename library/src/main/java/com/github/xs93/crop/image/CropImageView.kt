@@ -158,6 +158,7 @@ class CropImageView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val action = event.actionMasked
         if (action == MotionEvent.ACTION_DOWN) {
+            parent.requestDisallowInterceptTouchEvent(true)
             mUpAnim?.cancel()
             if (mShowCropLine) {
                 showCliPath()
@@ -170,6 +171,7 @@ class CropImageView @JvmOverloads constructor(
             hideClipPath()
             mLastScaleFocusX = 0f
             mLastScaleFocusY = 0f
+            parent.requestDisallowInterceptTouchEvent(false)
         }
         return true
     }
